@@ -1,6 +1,7 @@
 import numpy as np
 import math
 from scipy import linalg
+import warnings
 
 class LogMM:
     """ Log-Normal Mixture For one-dimensional data
@@ -84,7 +85,7 @@ class LogMM:
         Calculated Result
         """
         std = var*(1/2)
-        return (1/(y*std*np.sqrt(2*math.pi))) * np.exp(-(np.log(y)-mean)^2/(2*var))
+        return (1/(y*std*np.sqrt(2*math.pi))) * np.exp(-(np.log(y)-mean)**2/(2*var))
 
     def _e_step(self, X):
         """The expectation step for EM algorithm
@@ -98,7 +99,7 @@ class LogMM:
         --------
         res: matrix-like, has shape(len(X), n_components)
         """
-        n_samples, _ = np.shape(X)
+        n_samples, _ = X.shape()
         res = np.zeros((n_samples, self.n_components))
 
         for idx, data_point in enumerate(X):
@@ -129,10 +130,29 @@ class LogMM:
         n_samples, _ = X.shape()
         for i in range(n_components):
             means[i] = (np.sum([res[j][i] * X[j] for j in range(n_samples)])) / (np.sum(res, axis=0)[i])
-            var[i] = (np.sum([res[j][i] * (np.log(X[j]) - self._means[i])^2])) / (np.sum(res, axis=0)[i])
+            var[i] = (np.sum([res[j][i] * (np.log(X[j]) - self._means[i])**2])) / (np.sum(res, axis=0)[i])
             weights[i] = (np.sum(res, axis=0)[i]) / (n_samples)
 
-        return means, var, weights
+        self._means = means
+        self._vars = var
+        self._weights = weights
+
+    def calc_log_pdf_sum(self, X, resp_mat):
+        n_samples, _ = X.shape()
+        res = 0
+        for k in range(n_components):
+            std = np.sqrt(self._vars[k])
+            for j in range(n_samples):
+               res += (resp_mat[j][k]*(np.log(1/(X[j]*(2*math.pi)**(1/2)))-
+                   np.log(std)-
+                   ((np.log(X[j]) - self._means[k])**2/(2 * self._vars[k]))))
+        return res
+    def calculate_log_prob(self, X, resp_mat):
+        resp_mult_weights = np.sum([np.sum(resp_mat, axis=0)[k] * np.log(self._weights[k]) for k in range(n_componenets)])
+        log_pdf_sum =
+
+    def initialize_resp(X):
+        return np.tile(self._weights, (len(X), 1))
 
     def fit(self, X):
         """Estimate model parameters using X
@@ -145,4 +165,45 @@ class LogMM:
         --------
             None
         """
+
+        # Initializing parameters
+        self._initialize(X)
+        resp_mat = initialize_resp(X)
+        self.converged_ = False
+
+        print("Start fitting the data to logNormal mixture model.")
+        print("--------------------Parameters-------------------------")
+        print(f"n_components = {self.n_components},tolerance={self.tol}, max_iter={self.max_iter}, init_means = {self._means}, init_variance = {self._vars}, init_weights = {self._weights}")
+        print("-------------------------------------------------------")
+        ### Function incomplete
+        log_prob = self.calculate_log_prob(X, resp_mat)
+
+        for n_iter in range(1, self.max_iter + 1):
+            prev_log_prob = log_prob
+
+            # Response matrix from e-step
+            resp_mat = self._e_step(X)
+            self._m_step(X, resp_mat)
+
+            log_prob = calculate_log_prob(X, resp_mat)
+            change = log_prob - prev_log_prob
+
+            if abs(change) < self.tol:
+                self.converged_ = True
+                break
+
+        if not self.converged_:
+            warnings.warn('Initialization did not converge.'
+                    'Try different init parameters, '
+                    'or increase max_iter, tol '
+                    'or check for degenerate data.')
+        else:
+            print("Successfully fit the data")
+            print("-------Parameters--------")
+            print(f"means: {self._means}, variance: {self._vars}, weights: {self._weights}")
+
+
+
+
+
 
