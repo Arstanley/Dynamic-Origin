@@ -47,25 +47,24 @@ class LogMM:
             if len(means_init) != self.n_components:
                 raise ValueError("Invalid length for initial means: Means need to have the same length as number of components.")
 
-    def initialize_means_and_vars(self, X):
+    def _initialize_mv(self, X):
         """Initialize means and vars based on sorted value
         Parameters
         ---------
         X: array-like, input
         """
         _sorted = sorted(X)
-        mid = len(_sorted // 2)
-        return (np.array([np.means(_sorted[:mid]), np.means(_sorted[mid:])]),
-                np.array([np.var(_sorted[:mid]), np.var(_sorted[mid:])]))
+        mid = len(_sorted) // 2
+        return np.array([np.mean(_sorted[:mid]), np.mean(_sorted[mid:])]), np.array([np.var(X) for _ in range (self.n_components)])
 
     def _initialize(self, X):
-        """Initialization of the Gaussian Mixture Parameters
+        """Initialization for Mixture Model Parameters
         Parameters
-        ----------
-        X: array-like, input
+        -----------
+            X: array-like, input
         """
-        means, var = initialize_means_and_vars(X)
-        self._weights = (np.array([1/n_components for _ in n_components]) if
+        means, var = self._initialize_mv(X)
+        self._weights = (np.array([1/self.n_components for _ in range(self.n_components)]) if
                 self.weights_init is None else self.weights_init)
         self._means = (means if self.means_init is None
                 else self.menas_init)
@@ -99,13 +98,13 @@ class LogMM:
         --------
         res: matrix-like, has shape(len(X), n_components)
         """
-        n_samples, _ = X.shape()
+        n_samples = len(X)
         res = np.zeros((n_samples, self.n_components))
 
         for idx, data_point in enumerate(X):
-            denominator = np.sum([self._weights[j] * density_func(data_point, self._means[j], self._vars[j]) for j in range(self.n_components)])
+            denominator = np.sum([self._weights[j] * self.density_func(data_point, self._means[j], self._vars[j]) for j in range(self.n_components)])
             for j in range (self.n_components):
-                numerator = self._weights[j] * density_func(data_point, self._means[j], self._vars[j])
+                numerator = self._weights[j] * self.density_func(data_point, self._means[j], self._vars[j])
                 res[idx][j] = numerator / denominator
 
         return res
@@ -123,14 +122,14 @@ class LogMM:
         vars: Updated vars, Has shape (n_components, )
         weights: Updated weights, Has shape (n_components, )
         """
-        means = np.zeros((n_components, ))
-        var = np.zeros((n_components, ))
-        weights = np.zeros((n_components, ))
+        means = np.zeros((self.n_components, ))
+        var = np.zeros((self.n_components, ))
+        weights = np.zeros((self.n_components, ))
 
-        n_samples, _ = X.shape()
-        for i in range(n_components):
+        n_samples = len(X)
+        for i in range(self.n_components):
             means[i] = (np.sum([res[j][i] * X[j] for j in range(n_samples)])) / (np.sum(res, axis=0)[i])
-            var[i] = (np.sum([res[j][i] * (np.log(X[j]) - self._means[i])**2])) / (np.sum(res, axis=0)[i])
+            var[i] = (np.sum([res[j][i] * (np.log(X[j]) - self._means[i])**2 for j in range(n_samples)])) / (np.sum(res, axis=0)[i])
             weights[i] = (np.sum(res, axis=0)[i]) / (n_samples)
 
         self._means = means
@@ -138,20 +137,23 @@ class LogMM:
         self._weights = weights
 
     def calc_log_pdf_sum(self, X, resp_mat):
-        n_samples, _ = X.shape()
+        n_samples = len(X)
         res = 0
-        for k in range(n_components):
+        for k in range(self.n_components):
             std = np.sqrt(self._vars[k])
             for j in range(n_samples):
-               res += (resp_mat[j][k]*(np.log(1/(X[j]*(2*math.pi)**(1/2)))-
+                res += (resp_mat[j][k]*(np.log(1/(X[j]*(2*math.pi)**(1/2)))-
                    np.log(std)-
                    ((np.log(X[j]) - self._means[k])**2/(2 * self._vars[k]))))
         return res
-    def calculate_log_prob(self, X, resp_mat):
-        resp_mult_weights = np.sum([np.sum(resp_mat, axis=0)[k] * np.log(self._weights[k]) for k in range(n_componenets)])
-        log_pdf_sum =
 
-    def initialize_resp(X):
+    def calculate_log_prob(self, X, resp_mat):
+        resp_mult_weights = np.sum([np.sum(resp_mat, axis=0)[k] * np.log(self._weights[k]) for k in range(self.n_components)])
+        log_pdf_sum = self.calc_log_pdf_sum(X, resp_mat)
+
+        return resp_mult_weights + log_pdf_sum
+
+    def initialize_resp(self, X):
         return np.tile(self._weights, (len(X), 1))
 
     def fit(self, X):
@@ -168,7 +170,7 @@ class LogMM:
 
         # Initializing parameters
         self._initialize(X)
-        resp_mat = initialize_resp(X)
+        resp_mat = self.initialize_resp(X)
         self.converged_ = False
 
         print("Start fitting the data to logNormal mixture model.")
@@ -177,6 +179,7 @@ class LogMM:
         print("-------------------------------------------------------")
         ### Function incomplete
         log_prob = self.calculate_log_prob(X, resp_mat)
+        self._best_iter = None
 
         for n_iter in range(1, self.max_iter + 1):
             prev_log_prob = log_prob
@@ -185,18 +188,19 @@ class LogMM:
             resp_mat = self._e_step(X)
             self._m_step(X, resp_mat)
 
-            log_prob = calculate_log_prob(X, resp_mat)
+            log_prob = self.calculate_log_prob(X, resp_mat)
             change = log_prob - prev_log_prob
 
             if abs(change) < self.tol:
                 self.converged_ = True
+                self._best_iter = n_iter
                 break
 
         if not self.converged_:
-            warnings.warn('Initialization did not converge.'
-                    'Try different init parameters, '
-                    'or increase max_iter, tol '
-                    'or check for degenerate data.')
+            print ('--------Initialization did not converge.\n'
+                    +'Try different init parameters,\n'
+                    +'or increase max_iter, tol\n'
+                    +'or check for degenerate data.\n --------------------------')
         else:
             print("Successfully fit the data")
             print("-------Parameters--------")
