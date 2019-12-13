@@ -3,7 +3,7 @@ import math
 from scipy import linalg
 import warnings
 
-class LogMM:
+class LogMM_back_up:
     """ Log-Normal Mixture For one-dimensional data
 
     Parameters
@@ -216,8 +216,20 @@ class LogMM:
             print("-------Parameters--------")
             print(f"means: {self._means}, variance: {self._vars}, weights: {self._weights}")
 
+class LogNormal:
+    def __init__(self, mu, sigma):
+        #parameters
+        self.mu = mu
+        self.sigma = sigma
+        self.mean = np.exp(self.mu + self.sigma**2 / 2)
+        self.var = (np.exp(self.sigma**2)-1) * np.exp(2 * self.mu + self.sigma ** 2)
 
+    # PDF
+    def pdf(self, datum):
+        "Probability of a data point given the current parameters"
+        u = (np.log(datum)-self.mu) / abs(self.sigma)
+        y = (1/(datum * abs(self.sigma) * np.sqrt(2*math.pi))) * np.exp(-u*u/2)
+        return y
 
-
-
-
+    def __repr__(self):
+        return f'Gaussian({self.mu}, {self.sigma}), mean: {self.mean}, variance: {self.var}'
