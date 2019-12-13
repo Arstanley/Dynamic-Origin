@@ -39,12 +39,12 @@ class LogMM:
     def _check_parameters(self):
         """Check the Log Mixture parameters are well defined."""
         if (self.weights_init is not None):
-            if np.sum(weights_init) != 1:
+            if np.sum(self.weights_init) != 1:
                 raise ValueError("Invalid value for initial weights: Weights array need to have sum equals to 1.")
-            if len(weights_init) != self.n_components:
+            if len(self.weights_init) != self.n_components:
                 raise ValueError("Invalid length for initial weights: Weights need to have the same length as number of components.")
         if (self.means_init is not None):
-            if len(means_init) != self.n_components:
+            if len(self.means_init) != self.n_components:
                 raise ValueError("Invalid length for initial means: Means need to have the same length as number of components.")
 
     def _initialize_mv(self, X):
@@ -106,6 +106,15 @@ class LogMM:
             for j in range (self.n_components):
                 numerator = self._weights[j] * self.density_func(data_point, self._means[j], self._vars[j])
                 res[idx][j] = numerator / denominator
+
+        epslon = 1e-10
+        for i in range(res.shape[0]):
+            if (res[i,0] == 0):
+                res[i,0] += epslon
+                res[i,1] -= epslon
+            if (res[i,1] == 0):
+                res[i,0] -= epslon
+                res[i,1] += epslon
 
         return res
 
@@ -186,6 +195,7 @@ class LogMM:
 
             # Response matrix from e-step
             resp_mat = self._e_step(X)
+            print(resp_mat)
             self._m_step(X, resp_mat)
 
             log_prob = self.calculate_log_prob(X, resp_mat)
