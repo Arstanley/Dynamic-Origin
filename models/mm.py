@@ -2,6 +2,7 @@ import numpy as np
 import math
 from scipy import linalg
 import warnings
+from random import uniform
 
 class LogMM_back_up:
     """ Log-Normal Mixture For one-dimensional data
@@ -227,9 +228,68 @@ class LogNormal:
     # PDF
     def pdf(self, datum):
         "Probability of a data point given the current parameters"
-        u = (np.log(datum)-self.mu) / abs(self.sigma)
+        u = (np.log(datum)-self.mu) / (abs(self.sigma))
         y = (1/(datum * abs(self.sigma) * np.sqrt(2*math.pi))) * np.exp(-u*u/2)
         return y
 
     def __repr__(self):
-        return f'Gaussian({self.mu}, {self.sigma}), mean: {self.mean}, variance: {self.var}'
+        return f'LogNormal({self.mu}, {self.sigma}), mean: {self.mean}, variance: {self.var}'
+
+class LogNormalMM:
+
+    def __init__(self, data, mix=0.5):
+        self.data = data
+        # Parameter Initialization
+        self.one = LogNormal(uniform(0, 5), uniform(0, 1))
+        self.two = LogNormal(uniform(0, 1), uniform(0, 1))
+        print(self.one, self.two)
+        # weight
+        self.mix = mix
+
+    def e_step(self):
+
+        self.loglike = 0.
+        for datum in self.data:
+            wp1 = self.one.pdf(datum) * self.mix
+            wp2 = self.two.pdf(datum) * (1. - self.mix)
+
+            den = wp1 + wp2
+
+            # Normalization
+            wp1 /= den
+            wp2 /= den
+
+            self.loglike += np.log(wp1 + wp2)
+
+            yield (wp1, wp2)
+
+    def m_step(self, weights):
+        (left, right) = zip(*weights)
+        one_den = sum(left)
+        two_den = sum(right)
+
+        self.one.mu = sum(w * np.log(d) / one_den for (w, d) in zip(left, self.data))
+        self.two.mu = sum(w * np.log(d) / two_den for (w, d) in zip(right, self.data))
+
+        self.one.sigma = np.sqrt(sum(w * ((np.log(d) - self.one.mu) ** 2)
+            for (w, d) in zip(left, self.data)) / one_den)
+        self.two.sigma = np.sqrt(sum(w * ((np.log(d) - self.two.mu) ** 2)
+            for (w, d) in zip(right, self.data)) / two_den)
+
+        self.mix = one_den / len(self.data)
+
+    def iterate(self, N = 1, verbose = False):
+        "Perform N iterations, then compute log-liklihood"
+        for i in range (N):
+            self.m_step(list(self.e_step()))
+            if verbose:
+                print(self)
+
+    def pdf(self, x):
+        return self.mix * self.one.pdf(x) +  (1-self.mix) * self.two.pdf(x)
+
+    def __repr__(self):
+        return f'LogNormal Mixture {self.one}, {self.two}, mix = {self.mix}'
+
+    def __str__(self):
+        return f'Mixture: {self.one}, {self.two}, mix = {self.mix}'
