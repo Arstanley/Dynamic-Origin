@@ -278,6 +278,17 @@ class LogNormalMM:
 
         self.mix = one_den / len(self.data)
 
+    def fit(self, n_iteration=5, verbose=True):
+        self.best_loglike = float("-inf")
+        for _ in range(n_iterations):
+            try:
+                self.iterate(verbose)
+                if self.loglike > best_loglike and self.mix != np.nan:
+                    self.best_loglike = self.mix.loglike
+                    self.best_mix = self.mix
+            except (ZeroDivisionError, ValueError, RuntimeWarning):
+                pass
+
     def iterate(self, N = 1, verbose = False):
         "Perform N iterations, then compute log-liklihood"
         for i in range (N):
