@@ -3,6 +3,7 @@ import math
 from scipy import linalg
 import warnings
 from random import uniform
+from scipy.misc import logsumexp
 
 class LogMM_back_up:
     """ Log-Normal Mixture For one-dimensional data
@@ -237,7 +238,7 @@ class LogNormal:
 
 class LogNormalMM:
 
-    def __init__(self, mix=0.5):
+    def __init__(self, mix=0.5, tol=1e-10):
 
         # Parameter Initialization
         self.one = LogNormal(uniform(0, 5), uniform(0, 1))
@@ -245,6 +246,9 @@ class LogNormalMM:
 
         # weight initialization
         self.mix = mix
+
+        # Tolerance
+        self.tol = tol
 
     def e_step(self):
 
@@ -263,7 +267,9 @@ class LogNormalMM:
             yield (wp1, wp2)
 
     def m_step(self, weights):
+
         (left, right) = zip(*weights)
+
         one_den = sum(left)
         two_den = sum(right)
 
@@ -274,28 +280,42 @@ class LogNormalMM:
             for (w, d) in zip(left, self.data)) / one_den)
         self.two.sigma = np.sqrt(sum(w * ((np.log(d) - self.two.mu) ** 2)
             for (w, d) in zip(right, self.data)) / two_den)
-
+        
         self.mix = one_den / len(self.data)
 
-    def fit(self, data, n_iterations=5, verbose=True):
+    def fit(self, data, max_iterations=1000, verbose=True):
         self.data = data
         self.loglike = 0.
         self.best_loglike = float("-inf")
+        self._converged = False
 
-        for _ in range(n_iterations):
+        # Iterately Fit The Mixture Model With EM Algorithm
+        for iter in range(max_iterations):
             try:
-                self.iterate(verbose)
-                if self.loglike > self.best_loglike and self.mix != np.nan:
+                self.loglike = 0.
+                self.m_step(list(self.e_step()))
+                if verbose:
+                    print(f'Iteration {iter}: {self}')
+
+                if abs(self.best_loglike-self.loglike) < self.tol:
+                    self._converged = True 
+                    break
+            
+                if abs(self.loglike) > self.best_loglike and self.mix != np.nan:
                     self.best_loglike = self.loglike
                     self.best_mix = self.mix
             except (ZeroDivisionError, ValueError, RuntimeWarning):
                 pass
 
-    def iterate(self, verbose = False):
-        "Perform N iterations, then compute log-liklihood"
-        self.m_step(list(self.e_step()))
-        if verbose:
-            print(self)
+        # Handle Situation When Not Converged   
+        if self._converged == False:
+            print ('--------Initialization did not converge.\n'
+                    +'Try different init parameters,\n'
+                    +'or increase max_iter, tol\n'
+                    +'or check for degenerate data.\n --------------------------')
+        else: 
+            print ('----------Log-Normal Mixture Model Successfully Fit-------------')
+            print (f'Distribution 1: {self.one}\n Distribution 2: {self.two}')
 
     def pdf(self, x):
         return self.mix * self.one.pdf(x) +  (1-self.mix) * self.two.pdf(x)
