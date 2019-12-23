@@ -237,18 +237,17 @@ class LogNormal:
 
 class LogNormalMM:
 
-    def __init__(self, data, mix=0.5):
-        self.data = data
+    def __init__(self, mix=0.5):
+
         # Parameter Initialization
         self.one = LogNormal(uniform(0, 5), uniform(0, 1))
         self.two = LogNormal(uniform(0, 1), uniform(0, 1))
-        print(self.one, self.two)
-        # weight
+
+        # weight initialization
         self.mix = mix
 
     def e_step(self):
 
-        self.loglike = 0.
         for datum in self.data:
             wp1 = self.one.pdf(datum) * self.mix
             wp2 = self.two.pdf(datum) * (1. - self.mix)
@@ -278,23 +277,25 @@ class LogNormalMM:
 
         self.mix = one_den / len(self.data)
 
-    def fit(self, n_iteration=5, verbose=True):
+    def fit(self, data, n_iterations=5, verbose=True):
+        self.data = data
+        self.loglike = 0.
         self.best_loglike = float("-inf")
+
         for _ in range(n_iterations):
             try:
                 self.iterate(verbose)
-                if self.loglike > best_loglike and self.mix != np.nan:
-                    self.best_loglike = self.mix.loglike
+                if self.loglike > self.best_loglike and self.mix != np.nan:
+                    self.best_loglike = self.loglike
                     self.best_mix = self.mix
             except (ZeroDivisionError, ValueError, RuntimeWarning):
                 pass
 
-    def iterate(self, N = 1, verbose = False):
+    def iterate(self, verbose = False):
         "Perform N iterations, then compute log-liklihood"
-        for i in range (N):
-            self.m_step(list(self.e_step()))
-            if verbose:
-                print(self)
+        self.m_step(list(self.e_step()))
+        if verbose:
+            print(self)
 
     def pdf(self, x):
         return self.mix * self.one.pdf(x) +  (1-self.mix) * self.two.pdf(x)
