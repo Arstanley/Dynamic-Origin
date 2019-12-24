@@ -18,7 +18,7 @@ class DataLoader:
     def __init__(self, path):
         # Get the path to data
         self.path = path
-        self.files = [f for f in glob(DATA_PATH+"*")]
+        self.files = [f for f in glob(path+"*")]
         self.n = len(self.files)
 
     def get_file_list(self):
