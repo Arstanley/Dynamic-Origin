@@ -240,10 +240,6 @@ class LogNormalMM:
 
     def __init__(self, mix=0.5, tol=1e-10):
 
-        # Parameter Initialization
-        self.one = LogNormal(uniform(0, 5), uniform(0, 1))
-        self.two = LogNormal(uniform(0, 1), uniform(0, 1))
-
         # weight initialization
         self.mix = mix
 
@@ -283,27 +279,39 @@ class LogNormalMM:
         
         self.mix = one_den / len(self.data)
 
-    def fit(self, data, max_iterations=1000, verbose=True):
+        return np.array(weights)
+
+    def fit(self, data, max_iterations=100, verbose=True):
         self.data = data
         self.loglike = 0.
         self.best_loglike = float("-inf")
         self._converged = False
 
+        # Initialize the distributions
+        log_data = np.log(data)
+        self.one = LogNormal(uniform(np.min(log_data), np.max(log_data)), uniform(0.1, np.sqrt(np.var(log_data))))
+        self.two = LogNormal(uniform(np.min(log_data), np.max(log_data)), uniform(0.1, np.sqrt(np.var(log_data))))
+
         # Iterately Fit The Mixture Model With EM Algorithm
+        
         for iter in range(max_iterations):
             try:
                 self.loglike = 0.
-                self.m_step(list(self.e_step()))
+                # Get the response from Maximization Step
+                resp = self.m_step(list(self.e_step()))
                 if verbose:
                     print(f'Iteration {iter}: {self}')
-
+                # Stop iteration if converges
                 if abs(self.best_loglike-self.loglike) < self.tol:
                     self._converged = True 
                     break
-            
+                # Update prameters if there's greater loglike
                 if abs(self.loglike) > self.best_loglike and self.mix != np.nan:
                     self.best_loglike = self.loglike
                     self.best_mix = self.mix
+                    self.best_iter = iter
+                    self.best_resp = resp
+
             except (ZeroDivisionError, ValueError, RuntimeWarning):
                 pass
 
@@ -316,6 +324,12 @@ class LogNormalMM:
         else: 
             print ('----------Log-Normal Mixture Model Successfully Fit-------------')
             print (f'Distribution 1: {self.one}\n Distribution 2: {self.two}')
+
+        
+
+    def fit_predict(self, data, max_iterations = 100, verbose=True):
+        self.fit(data, max_iterations, verbose)
+        return np.argmax(self.best_resp, axis=1)
 
     def pdf(self, x):
         return self.mix * self.one.pdf(x) +  (1-self.mix) * self.two.pdf(x)
